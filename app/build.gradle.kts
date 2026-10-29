@@ -10,7 +10,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.nemotv.player"
+        applicationId = "com.nplayer.tv"
         minSdk = 21
         targetSdk = 34
         versionCode = 5
