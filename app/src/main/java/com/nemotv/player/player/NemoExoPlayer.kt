@@ -39,7 +39,18 @@ class NemoExoPlayer(private val context: Context) {
     }
 
     private fun initPlayer() {
-        exoPlayer = ExoPlayer.Builder(context).build().apply {
+        val renderersFactory = androidx.media3.exoplayer.DefaultRenderersFactory(context).apply {
+            setExtensionRendererMode(androidx.media3.exoplayer.DefaultRenderersFactory.EXTENSION_RENDERER_MODE_PREFER)
+            setEnableDecoderFallback(true)
+        }
+        val audioAttributes = androidx.media3.common.AudioAttributes.Builder()
+            .setUsage(C.USAGE_MEDIA)
+            .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+            .build()
+
+        exoPlayer = ExoPlayer.Builder(context, renderersFactory)
+            .setAudioAttributes(audioAttributes, true)
+            .build().apply {
             playWhenReady = true
             addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {

@@ -120,16 +120,23 @@ fun SplashView(statusText: String) {
                 letterSpacing = (-0.5).sp
             )
 
-            Spacer(modifier = Modifier.height(6.dp))
+            Spacer(modifier = Modifier.height(10.dp))
 
-            // Developer Kurup Subtitle in glowing cyan
-            Text(
-                text = "DEVELOPED BY KURUP",
-                fontSize = 17.sp,
-                fontWeight = FontWeight.Bold,
-                color = FocusCyan,
-                letterSpacing = 2.5.sp
-            )
+            // Developer Kurup Subtitle with neon badge
+            Box(
+                modifier = Modifier
+                    .border(1.5.dp, FocusCyan.copy(alpha = 0.85f), RoundedCornerShape(20.dp))
+                    .background(FocusCyan.copy(alpha = 0.16f), RoundedCornerShape(20.dp))
+                    .padding(horizontal = 20.dp, vertical = 7.dp)
+            ) {
+                Text(
+                    text = "✦ DEVELOPED BY KURUP ✦",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    color = FocusCyan,
+                    letterSpacing = 2.5.sp
+                )
+            }
 
             Spacer(modifier = Modifier.height(28.dp))
 

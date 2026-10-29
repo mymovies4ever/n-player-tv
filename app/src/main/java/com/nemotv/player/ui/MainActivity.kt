@@ -67,7 +67,7 @@ class MainActivity : ComponentActivity() {
                 LaunchedEffect(Unit) {
                     val channels = repository.initialize()
                     splashText = "Loaded ${channels.size} Channels • Fleet Ready"
-                    delay(1200)
+                    delay(3000)
                     isSplashActive = false
                 }
 

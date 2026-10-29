@@ -97,26 +97,81 @@ fun TVPlayerScreen(
             .fillMaxSize()
             .background(Color.Black)
     ) {
-        // Native Media3 PlayerView
-        AndroidView(
-            modifier = Modifier.fillMaxSize(),
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    layoutParams = FrameLayout.LayoutParams(
-                        ViewGroup.LayoutParams.MATCH_PARENT,
-                        ViewGroup.LayoutParams.MATCH_PARENT
-                    )
-                    useController = false
-                    player = nemoPlayer.exoPlayer
+        // Native Media3 PlayerView with tap-to-toggle controls
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .clickable {
+                    if (isMiniEpgOpen) {
+                        onCloseMiniEpg()
+                    } else {
+                        showStbBanner = !showStbBanner
+                    }
                 }
-            },
-            update = { view ->
-                view.player = nemoPlayer.exoPlayer
+        ) {
+            AndroidView(
+                modifier = Modifier.fillMaxSize(),
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        layoutParams = FrameLayout.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.MATCH_PARENT
+                        )
+                        useController = false
+                        player = nemoPlayer.exoPlayer
+                    }
+                },
+                update = { view ->
+                    view.player = nemoPlayer.exoPlayer
+                }
+            )
+        }
+
+        // Playback Error Overlay
+        if (errorMessage != null && !isBuffering) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.65f)),
+                contentAlignment = Alignment.Center
+            ) {
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier
+                        .background(Color(0xFF0F172A), RoundedCornerShape(16.dp))
+                        .border(1.5.dp, AccentOrange, RoundedCornerShape(16.dp))
+                        .padding(24.dp)
+                ) {
+                    Text("⚠️ Playback Notice", color = AccentOrange, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage ?: "Unable to play stream",
+                        color = Color.White,
+                        fontSize = 14.sp
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Row {
+                        Button(
+                            onClick = { nemoPlayer.switchNextSource("User retry") },
+                            colors = ButtonDefaults.buttonColors(containerColor = FocusCyan),
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Switch Source / Retry", color = Color.Black, fontWeight = FontWeight.Bold)
+                        }
+                        Spacer(modifier = Modifier.width(12.dp))
+                        OutlinedButton(
+                            onClick = onBackToGuide,
+                            shape = RoundedCornerShape(10.dp)
+                        ) {
+                            Text("Back to Guide", color = Color.White)
+                        }
+                    }
+                }
             }
-        )
+        }
 
         // Loading Spinner during initial connect / buffer
-        if (isBuffering) {
+        if (isBuffering && errorMessage == null) {
             Box(
                 modifier = Modifier
                     .fillMaxSize()
@@ -245,7 +300,35 @@ fun TVPlayerScreen(
             }
         }
 
-        // Mini-EPG Quick Channel Drawer (Triggered by OK / Remote Enter)
+        // Floating On-Screen "Channels (OK)" button for mobile touch and mouse navigation
+        AnimatedVisibility(
+            visible = showStbBanner && !isMiniEpgOpen,
+            enter = fadeIn() + slideInVertically(initialOffsetY = { it }),
+            exit = fadeOut() + slideOutVertically(targetOffsetY = { it }),
+            modifier = Modifier
+                .align(Alignment.BottomEnd)
+                .padding(end = 28.dp, bottom = 28.dp)
+        ) {
+            Button(
+                onClick = onToggleMiniEpg,
+                shape = RoundedCornerShape(14.dp),
+                colors = ButtonDefaults.buttonColors(containerColor = FocusCyan),
+                elevation = ButtonDefaults.buttonElevation(defaultElevation = 8.dp)
+            ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("📺", fontSize = 16.sp)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        "Channels (OK)",
+                        color = Color.Black,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 15.sp
+                    )
+                }
+            }
+        }
+
+        // Mini-EPG Quick Channel Drawer (Triggered by OK / Remote Enter / Touch)
         AnimatedVisibility(
             visible = isMiniEpgOpen,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
@@ -307,13 +390,24 @@ fun TVPlayerScreen(
                             )
                         }
 
-                        Text(
-                            text = "NEXT: ${spotlightEpg.nextTitle}",
-                            color = TextSecondary,
-                            fontSize = 13.sp,
-                            maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
-                        )
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                text = "NEXT: ${spotlightEpg.nextTitle}",
+                                color = TextSecondary,
+                                fontSize = 13.sp,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Spacer(modifier = Modifier.width(14.dp))
+                            IconButton(
+                                onClick = onCloseMiniEpg,
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color.White.copy(alpha = 0.12f), CircleShape)
+                            ) {
+                                Text("✕", color = Color.White, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
                     }
                 }
 
