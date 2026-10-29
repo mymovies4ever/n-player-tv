@@ -265,6 +265,22 @@
     }
 
     async fetchPlaylistWithTimeout(playlist, timeoutMs = 28000) {
+      // 1. Android TV Native Bridge (bypasses WebView CORS and restrictions)
+      if (typeof window !== 'undefined' && window.AndroidNative && typeof window.AndroidNative.fetchUrl === 'function') {
+        try {
+          console.log(`[NemoTV] 🌐 Fetching via AndroidNative: ${playlist.name}`);
+          const nativeText = window.AndroidNative.fetchUrl(playlist.url);
+          if (nativeText && (nativeText.includes('#EXTM3U') || nativeText.includes('#EXTINF'))) {
+            const items = M3UParser.parse(nativeText, playlist.name);
+            console.log(`[NemoTV] ✓ ${playlist.name}: parsed ${items.length} stream entries via native`);
+            return { name: playlist.name, items, success: true };
+          }
+        } catch (nativeErr) {
+          console.warn(`[NemoTV] AndroidNative fetch failed for ${playlist.name}:`, nativeErr);
+        }
+      }
+
+      // 2. Browser fetch fallback
       const controller = new AbortController();
       const id = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -275,8 +291,7 @@
           resp = await fetch(playlist.url, {
             signal: controller.signal,
             headers: {
-              'Accept': '*/*',
-              'User-Agent': 'Mozilla/5.0 (SmartTV; webOS; NemoTV/1.0)'
+              'Accept': '*/*'
             }
           });
         } catch (fetchErr) {
@@ -310,24 +325,50 @@
     }
 
     loadCachedChannels() {
-      if (typeof localStorage === 'undefined') return false;
-      try {
-        const cached = localStorage.getItem(CACHE_KEY_CHANNELS);
-        if (cached) {
-          this.channels = JSON.parse(cached);
-          this.channels.forEach((ch, idx) => {
-            if (!ch.channelNumber) {
-              ch.channelNumber = idx + 1;
+      // 1. Try local storage cache
+      if (typeof localStorage !== 'undefined') {
+        try {
+          const cached = localStorage.getItem(CACHE_KEY_CHANNELS);
+          if (cached) {
+            const list = JSON.parse(cached);
+            if (list && list.length > 0) {
+              this.channels = list;
+              this.channels.forEach((ch, idx) => {
+                if (!ch.channelNumber) ch.channelNumber = idx + 1;
+              });
+              this.extractCategories();
+              this.extractLanguages();
+              console.log(`[NemoTV] Restored ${this.channels.length} channels from offline cache`);
+              return true;
             }
-          });
-          this.extractCategories();
-          this.extractLanguages();
-          console.log(`[NemoTV] Restored ${this.channels.length} channels from offline cache`);
-          return true;
+          }
+        } catch (e) {
+          console.warn('[NemoTV] Cache restoration failed:', e);
         }
-      } catch (e) {
-        console.warn('[NemoTV] Cache restoration failed:', e);
       }
+
+      // 2. Try Android native bundled master channels (instant zero-network cold start)
+      if (typeof window !== 'undefined' && window.AndroidNative && typeof window.AndroidNative.loadBundledChannels === 'function') {
+        try {
+          const bundled = window.AndroidNative.loadBundledChannels();
+          if (bundled) {
+            const list = JSON.parse(bundled);
+            if (list && list.length > 0) {
+              this.channels = list;
+              this.channels.forEach((ch, idx) => {
+                if (!ch.channelNumber) ch.channelNumber = idx + 1;
+              });
+              this.extractCategories();
+              this.extractLanguages();
+              console.log(`[NemoTV] 🚀 Loaded ${this.channels.length} channels from Android APK bundle`);
+              return true;
+            }
+          }
+        } catch (e) {
+          console.warn('[NemoTV] Bundled APK channel loading failed:', e);
+        }
+      }
+
       return false;
     }
 

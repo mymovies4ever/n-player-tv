@@ -59,8 +59,8 @@ body {
 .splash-screen {
   position: fixed;
   inset: 0;
-  width: 1920px;
-  height: 1080px;
+  width: 100vw;
+  height: 100vh;
   background: radial-gradient(circle at 50% 45%, #0f1c3f 0%, #060b17 65%, #02050b 100%);
   display: flex;
   align-items: center;

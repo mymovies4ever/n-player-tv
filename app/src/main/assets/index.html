@@ -320,6 +320,16 @@
           return epgCache.get(id);
         }
         try {
+          if (typeof window !== 'undefined' && window.AndroidNative && typeof window.AndroidNative.fetchUrl === 'function') {
+            const epgText = window.AndroidNative.fetchUrl(`https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get?offset=0&channel_id=${id}`);
+            if (epgText) {
+              const data = JSON.parse(epgText);
+              if (data && data.epg && data.epg.length > 0) {
+                epgCache.set(id, data.epg);
+                return data.epg;
+              }
+            }
+          }
           const resp = await fetch(`https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get?offset=0&channel_id=${id}`);
           if (!resp.ok) return null;
           const data = await resp.json();
@@ -962,17 +972,36 @@
         }
       });
 
-      // 1. Try to load cached channels immediately for instant boot
-      const hasCache = channelManager.loadCachedChannels();
+      // 1. Try to load cached or bundled channels immediately for instant boot
+      let hasCache = channelManager.loadCachedChannels();
+      if (!hasCache) {
+        try {
+          const resp = await fetch('default_channels.json');
+          if (resp.ok) {
+            const list = await resp.json();
+            if (list && list.length > 0) {
+              channelManager.channels = list;
+              channelManager.channels.forEach((ch, idx) => {
+                if (!ch.channelNumber) ch.channelNumber = idx + 1;
+              });
+              channelManager.extractCategories();
+              channelManager.extractLanguages();
+              hasCache = true;
+            }
+          }
+        } catch (_) {}
+      }
+
       if (hasCache) {
         refreshBars();
         applyFiltersAndRender();
         updateStats();
-        // Instant boot with smooth splash transition
-        setTimeout(dismissSplashScreen, 1200);
+        // Cinematic opening animation transition
+        if (elSplashStatus) elSplashStatus.textContent = `Loaded ${channelManager.channels.length} Channels • Fleet Ready`;
+        setTimeout(dismissSplashScreen, 1100);
       } else {
-        // Fallback safety: dismiss splash after 4s max even if offline
-        setTimeout(dismissSplashScreen, 4000);
+        // Fallback safety: dismiss splash after 3s max even if offline
+        setTimeout(dismissSplashScreen, 3000);
       }
 
       // 2. Fetch fresh playlists in background
