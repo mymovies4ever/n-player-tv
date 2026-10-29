@@ -1,8 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.NPlayerTV" parent="Theme.AppCompat.NoActionBar">
+    <style name="Theme.NPlayerTV" parent="android:Theme.Material.NoActionBar">
+        <item name="android:statusBarColor">#060B17</item>
+        <item name="android:navigationBarColor">#060B17</item>
         <item name="android:windowBackground">@color/background_dark</item>
         <item name="android:windowFullscreen">true</item>
-        <item name="android:windowContentOverlay">@null</item>
         <item name="android:keepScreenOn">true</item>
     </style>
 </resources>

@@ -43,9 +43,9 @@ jobs:
         uses: softprops/action-gh-release@v2
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         with:
-          tag_name: v1.0.2
-          name: "N-Player TV v1.0.2"
-          body: "Standalone Android TV / Google TV Release Build (Debug signed, ready for sideloading)."
+          tag_name: v2.0.0
+          name: "N-Player TV v2.0.0 (Native Android TV)"
+          body: "100% Pure Native Android TV application built with AndroidX Media3 (ExoPlayer), Jetpack Compose, pre-fed master channels, and native ClearKey DRM."
           files: app/build/outputs/apk/debug/app-debug.apk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

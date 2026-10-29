@@ -1,0 +1,198 @@
+package com.nemotv.player.player
+
+import android.content.Context
+import android.net.Uri
+import androidx.annotation.OptIn
+import androidx.media3.common.C
+import androidx.media3.common.MediaItem
+import androidx.media3.common.MimeTypes
+import androidx.media3.common.PlaybackException
+import androidx.media3.common.Player
+import androidx.media3.common.util.UnstableApi
+import androidx.media3.datasource.DefaultHttpDataSource
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.drm.DefaultDrmSessionManager
+import androidx.media3.exoplayer.drm.FrameworkMediaDrm
+import androidx.media3.exoplayer.drm.LocalMediaDrmCallback
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.nemotv.player.data.model.Channel
+import com.nemotv.player.data.model.StreamSource
+import java.nio.charset.StandardCharsets
+import java.util.Base64
+
+@OptIn(UnstableApi::class)
+class NemoExoPlayer(private val context: Context) {
+
+    var exoPlayer: ExoPlayer? = null
+        private set
+
+    var currentChannel: Channel? = null
+        private set
+    var currentSourceIndex: Int = 0
+        private set
+
+    var onStateChanged: ((isPlaying: Boolean, isBuffering: Boolean, errorMsg: String?) -> Unit)? = null
+    var onSourceSwitched: ((sourceIndex: Int, totalSources: Int) -> Unit)? = null
+
+    init {
+        initPlayer()
+    }
+
+    private fun initPlayer() {
+        exoPlayer = ExoPlayer.Builder(context).build().apply {
+            playWhenReady = true
+            addListener(object : Player.Listener {
+                override fun onPlaybackStateChanged(state: Int) {
+                    val isBuffering = state == Player.STATE_BUFFERING
+                    val isPlaying = isPlaying
+                    onStateChanged?.invoke(isPlaying, isBuffering, null)
+                }
+
+                override fun onIsPlayingChanged(isPlaying: Boolean) {
+                    val isBuffering = exoPlayer?.playbackState == Player.STATE_BUFFERING
+                    onStateChanged?.invoke(isPlaying, isBuffering, null)
+                }
+
+                override fun onPlayerError(error: PlaybackException) {
+                    onStateChanged?.invoke(false, false, error.message)
+                    // Trigger auto-failover
+                    switchNextSource("Playback error")
+                }
+            })
+        }
+    }
+
+    fun playChannel(channel: Channel, sourceIdx: Int = 0) {
+        currentChannel = channel
+        currentSourceIndex = sourceIdx
+        val sources = channel.sources
+        if (sources.isEmpty()) {
+            onStateChanged?.invoke(false, false, "No stream sources available")
+            return
+        }
+
+        val source = sources.getOrElse(sourceIdx) { sources[0] }
+        playSource(source)
+        onSourceSwitched?.invoke(sourceIdx, sources.size)
+    }
+
+    fun switchNextSource(reason: String = "Manual switch"): Boolean {
+        val ch = currentChannel ?: return false
+        val sources = ch.sources
+        if (sources.size <= 1) return false
+
+        val nextIdx = (currentSourceIndex + 1) % sources.size
+        playChannel(ch, nextIdx)
+        return true
+    }
+
+    private fun playSource(source: StreamSource) {
+        val player = exoPlayer ?: return
+        val rawUrl = source.url.trim()
+
+        val defaultUserAgent = source.headers?.get("User-Agent")
+            ?: "Mozilla/5.0 (SmartTV; NemoTV/2.0) AppleWebKit/537.36 Chrome/120.0"
+
+        val httpDataSourceFactory = DefaultHttpDataSource.Factory()
+            .setUserAgent(defaultUserAgent)
+            .setAllowCrossProtocolRedirects(true)
+            .setConnectTimeoutMs(15000)
+            .setReadTimeoutMs(20000)
+
+        source.headers?.let { headers ->
+            val custom = headers.filterKeys { !it.equals("User-Agent", ignoreCase = true) }
+            if (custom.isNotEmpty()) {
+                httpDataSourceFactory.setDefaultRequestProperties(custom)
+            }
+        }
+
+        val mediaSourceFactory = DefaultMediaSourceFactory(context)
+            .setDataSourceFactory(httpDataSourceFactory)
+
+        val mediaItemBuilder = MediaItem.Builder().setUri(Uri.parse(rawUrl))
+
+        if (rawUrl.contains(".mpd", ignoreCase = true) || source.manifestType == "mpd") {
+            mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_MPD)
+        } else if (rawUrl.contains(".m3u8", ignoreCase = true) || source.manifestType == "hls") {
+            mediaItemBuilder.setMimeType(MimeTypes.APPLICATION_M3U8)
+        }
+
+        // Configure ClearKey DRM if present
+        val drmKey = source.drm?.key
+        if (!drmKey.isNullOrBlank() && (source.drm?.type?.contains("clearkey", ignoreCase = true) == true || drmKey.contains(":"))) {
+            val jsonBytes = buildClearKeyW3cJsonBytes(drmKey)
+            if (jsonBytes != null) {
+                val callback = LocalMediaDrmCallback(jsonBytes)
+                val drmManager = DefaultDrmSessionManager.Builder()
+                    .setUuidAndExoMediaDrmProvider(C.CLEARKEY_UUID, FrameworkMediaDrm.DEFAULT_PROVIDER)
+                    .setMultiSession(true)
+                    .setPlayClearSamplesWithoutKeys(true)
+                    .build(callback)
+                mediaSourceFactory.setDrmSessionManagerProvider { drmManager }
+
+                val drmConfig = MediaItem.DrmConfiguration.Builder(C.CLEARKEY_UUID)
+                    .setMultiSession(true)
+                    .build()
+                mediaItemBuilder.setDrmConfiguration(drmConfig)
+            }
+        }
+
+        val mediaSource = mediaSourceFactory.createMediaSource(mediaItemBuilder.build())
+        player.setMediaSource(mediaSource)
+        player.prepare()
+        player.play()
+    }
+
+    private fun buildClearKeyW3cJsonBytes(rawKey: String): ByteArray? {
+        return try {
+            val pairs = rawKey.split(",", "\n", " ")
+                .map { it.trim() }
+                .filter { it.contains(":") }
+
+            if (pairs.isEmpty()) return null
+
+            val encoder = Base64.getUrlEncoder().withoutPadding()
+            val entries = mutableListOf<String>()
+
+            for (pair in pairs) {
+                val parts = pair.split(":")
+                if (parts.size >= 2) {
+                    val kidHex = parts[0].trim().replace("-", "").replace(" ", "")
+                    val keyHex = parts[1].trim().replace("-", "").replace(" ", "")
+
+                    if (kidHex.length % 2 == 0 && keyHex.length % 2 == 0 && kidHex.isNotEmpty() && keyHex.isNotEmpty()) {
+                        val kidBytes = hexToBytes(kidHex)
+                        val keyBytes = hexToBytes(keyHex)
+                        val kidB64 = encoder.encodeToString(kidBytes)
+                        val keyB64 = encoder.encodeToString(keyBytes)
+                        entries.add("""{"kty":"oct","k":"$keyB64","kid":"$kidB64"}""")
+                    }
+                }
+            }
+
+            if (entries.isEmpty()) return null
+            val json = """{"keys":[${entries.joinToString(",")}], "type":"temporary"}"""
+            json.toByteArray(StandardCharsets.UTF_8)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun hexToBytes(hex: String): ByteArray {
+        val len = hex.length
+        val data = ByteArray(len / 2)
+        var i = 0
+        while (i < len) {
+            val high = Character.digit(hex[i], 16)
+            val low = Character.digit(hex[i + 1], 16)
+            data[i / 2] = ((high shl 4) + low).toByte()
+            i += 2
+        }
+        return data
+    }
+
+    fun release() {
+        exoPlayer?.release()
+        exoPlayer = null
+    }
+}
