@@ -1,0 +1,983 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Nemo TV</title>
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- Cinematic Opening Splash Screen -->
+  <div id="splash-screen" class="splash-screen">
+    <div class="splash-glow"></div>
+    <div class="splash-content">
+      <div class="splash-logo-container">
+        <div class="splash-pulse-ring"></div>
+        <div class="splash-pulse-ring delay-1"></div>
+        <div class="brand-logo splash-logo">
+          <svg viewBox="0 0 24 24">
+            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+          </svg>
+        </div>
+      </div>
+      <h1 class="splash-title">Nemo TV</h1>
+      <p class="splash-subtitle">Developed by Kurup</p>
+      <div class="splash-progress-bar">
+        <div class="splash-progress-fill"></div>
+      </div>
+      <span id="splash-status" class="splash-status">Initializing Multi-Playlist Fleet...</span>
+    </div>
+  </div>
+
+  <!-- Top App Navigation Header -->
+  <header class="app-header">
+    <div class="brand-container">
+      <div class="brand-logo">
+        <svg viewBox="0 0 24 24">
+          <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14.5v-9l6 4.5-6 4.5z"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>Nemo TV</h1>
+        <span>Smart IPTV Engine</span>
+      </div>
+    </div>
+
+    <!-- Top-Level Section Switcher -->
+    <div class="section-switch">
+      <button id="sec-live" class="section-btn active" data-section="live">
+        <span class="sec-icon">📺</span> Live TV
+      </button>
+      <button id="sec-vod" class="section-btn" data-section="vod">
+        <span class="sec-icon">🎬</span> Movies (VOD)
+      </button>
+    </div>
+
+    <div class="header-meta">
+      <div class="stat-pill">
+        <span class="dot"></span>
+        <span id="stat-summary">Loading fleet...</span>
+      </div>
+      <input type="text" id="search-input" class="search-input" placeholder="🔍 Search channels or languages..." />
+      <button id="btn-sync" class="btn-header">
+        <span id="sync-icon">🔄</span>
+        <span>Sync Playlists</span>
+      </button>
+    </div>
+  </header>
+
+  <!-- Horizontal Category Drawer -->
+  <nav id="category-bar" class="category-bar">
+    <button class="category-chip active" data-category="All Channels">All Channels</button>
+  </nav>
+
+  <!-- Horizontal Language Priority Bar -->
+  <nav id="language-bar" class="language-bar">
+    <button class="language-chip active" data-language="All Languages">🌐 All Languages</button>
+  </nav>
+
+  <!-- Channels Grid View -->
+  <main class="main-content">
+    <div id="channel-grid" class="channel-grid">
+      <!-- Dynamic Channel Cards rendered here -->
+    </div>
+    <div id="loading-view" style="text-align: center; padding: 120px 0;">
+      <div class="spinner" style="width: 48px; height: 48px; border-width: 5px;"></div>
+      <h2 style="margin-top: 24px; color: var(--text-secondary); font-size: 24px;">Aggregating 11 Playlists & Resolving DRM Streams...</h2>
+    </div>
+  </main>
+
+  <!-- Fullscreen Shaka Video Player & Overlay -->
+  <section id="player-view" class="hidden" tabindex="-1">
+    <video id="video-player" autoplay playsinline webkit-playsinline></video>
+
+    <!-- Animated Broadcast Loading Overlay -->
+    <div id="player-loader" class="player-loader">
+      <div class="loader-visual-wrap">
+        <div class="loader-pulse-ring"></div>
+        <div class="loader-spinner"></div>
+        <img id="loader-channel-logo" class="loader-logo" src="icon.png" alt="Channel Logo" onerror="this.src='icon.png';" />
+      </div>
+      <div id="loader-channel-name" class="loader-channel-name">Channel Name</div>
+      <div id="loader-status" class="loader-status">Connecting to Broadcast Stream...</div>
+      <div class="loader-progress-track">
+        <div class="loader-progress-bar"></div>
+      </div>
+    </div>
+
+    <!-- Player In-Screen HUD -->
+    <div id="player-hud" class="player-hud">
+      <!-- Top Status & Channel Header -->
+      <div class="hud-top">
+        <div class="hud-channel-info">
+          <button id="btn-player-back" class="hud-btn-back">
+            <span>←</span> Back to TV Guide
+          </button>
+          <img id="player-channel-logo" class="hud-logo" src="assets/default_channel.png" alt="Logo" onerror="this.src='icon.png';" />
+          <div class="hud-titles">
+            <h2 id="player-channel-title">Channel Name</h2>
+            <span id="player-source-badge">Source 1 of 1 • Default</span>
+          </div>
+        </div>
+
+        <div class="live-badge">
+          <span class="pulse"></span> LIVE
+        </div>
+      </div>
+
+      <!-- Center Auto-Failover Notification Banner -->
+      <div id="status-banner" class="status-banner info hidden">
+        Connecting to Stream...
+      </div>
+
+      <!-- Bottom Playback Controls -->
+      <div class="hud-bottom">
+        <div class="hud-controls-left">
+          <button id="btn-player-play" class="hud-btn">⏸ Pause</button>
+          <button id="btn-player-reload" class="hud-btn">🔄 Reload</button>
+          <button id="btn-player-next-source" class="hud-btn" style="background: rgba(249, 115, 22, 0.8);">
+            ⚡ Switch Next Source
+          </button>
+        </div>
+
+        <div class="hud-controls-right">
+          <select id="select-audio" class="hud-select hidden">
+            <option value="-1">Auto Audio</option>
+          </select>
+          <select id="select-quality" class="hud-select">
+            <option value="-1">Auto Quality</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Mini-EPG Quick Channel Zapper Overlay (OK button drawer) -->
+    <div id="mini-epg-drawer" class="mini-epg-drawer hidden">
+      <div class="mini-epg-header">
+        <div class="mini-epg-title">
+          <span>⚡ Quick Channel Guide (EPG)</span>
+          <span id="mini-epg-count" class="mini-epg-count">0 Channels</span>
+        </div>
+        <button id="mini-epg-audio-btn" class="mini-epg-audio-btn hidden">🔊 Audio: Default</button>
+        <span class="mini-epg-hint">◄ ► Browse • OK Switch • 🟡/Click Audio • ▲▼/Back Close</span>
+      </div>
+
+      <!-- Focused Channel Live EPG Preview Spotlight -->
+      <div id="mini-epg-focus-preview" class="mini-epg-focus-preview">
+        <div class="focus-ch-badge">
+          <span id="mini-focus-num" class="focus-num">#001</span>
+          <span id="mini-focus-name" class="focus-name">Channel Name</span>
+          <span id="mini-focus-cat" class="focus-cat">ENTERTAINMENT</span>
+        </div>
+        <div class="focus-epg-info">
+          <div class="focus-epg-row">
+            <span class="focus-live-pill">🔴 NOW</span>
+            <span id="mini-focus-prog" class="focus-prog">Prime Time Special</span>
+            <span id="mini-focus-time" class="focus-time">12:00 PM - 01:00 PM</span>
+          </div>
+          <div id="mini-focus-next" class="focus-next">NEXT: Upcoming Program</div>
+        </div>
+      </div>
+
+      <div id="mini-epg-carousel" class="mini-epg-carousel"></div>
+    </div>
+
+    <!-- Set-Top Box (STB) Broadcast OSD Banner & EPG Info -->
+    <div id="stb-banner" class="stb-banner hidden">
+      <div class="stb-banner-inner">
+        <!-- Left: Channel Number & Logo -->
+        <div class="stb-left">
+          <div id="stb-ch-num" class="stb-ch-num">001</div>
+          <div class="stb-logo-wrap">
+            <img id="stb-logo" class="stb-logo" src="icon.png" alt="Logo" onerror="this.src='icon.png';" />
+          </div>
+        </div>
+
+        <!-- Middle: Channel Details, Live Badge, EPG Program & Time Slider -->
+        <div class="stb-center">
+          <div class="stb-top-row">
+            <h2 id="stb-title" class="stb-title">Channel Name</h2>
+            <span class="stb-live-badge"><span class="stb-pulse"></span> LIVE</span>
+            <span id="stb-lang-badge" class="stb-badge">GENERAL</span>
+            <span id="stb-category-badge" class="stb-badge stb-cat">ENTERTAINMENT</span>
+          </div>
+          <div class="stb-epg-row">
+            <span id="stb-program-title" class="stb-program-title">Prime Broadcast Special</span>
+            <span id="stb-program-time" class="stb-program-time">10:00 AM - 11:00 AM</span>
+          </div>
+          <div class="stb-progress-wrap">
+            <div class="stb-progress-track">
+              <div id="stb-progress-bar" class="stb-progress-fill" style="width: 45%;"></div>
+            </div>
+            <span id="stb-remaining" class="stb-remaining">25 mins left</span>
+          </div>
+          <div class="stb-next-row">
+            <span class="stb-next-label">NEXT:</span>
+            <span id="stb-next-title" class="stb-next-title">Evening Express (11:00 AM - 12:00 PM)</span>
+          </div>
+        </div>
+
+        <!-- Right: Stream Quality & Source Details -->
+        <div class="stb-right">
+          <div class="stb-quality-badges">
+            <span id="stb-res-badge" class="stb-pill">1080p FHD</span>
+            <span class="stb-pill">50 FPS</span>
+            <button id="stb-audio-btn" class="stb-pill stb-audio-badge">🔊 STEREO</button>
+          </div>
+          <div id="stb-source-info" class="stb-source-info">Source 1 of 1</div>
+          <div class="stb-hint">▲▼ Switch • OK Channels • 🟡 Audio • Back Exit</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Channel Direct Numeric Tuning OSD (Keypad / Digits 0-9) -->
+  <div id="channel-number-osd" class="channel-number-osd hidden">
+    <div class="channel-digit-header">
+      <span class="channel-digit-badge">TUNE</span>
+      <span id="channel-digit-display" class="channel-digit-display">001</span>
+    </div>
+    <div id="channel-digit-match" class="channel-digit-match">Channel Name</div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/webOSTV.js"></script>
+  <script src="js/hls.min.js"></script>
+  <script src="js/shaka-player.compiled.js"></script>
+  <script src="js/m3u_parser.js"></script>
+  <script src="js/channel_manager.js"></script>
+  <script src="js/player.js"></script>
+  <script src="js/navigation.js"></script>
+
+  <!-- Application Bootstrap -->
+  <script>
+    document.addEventListener('DOMContentLoaded', async () => {
+      console.log('[NemoTV] App initializing...');
+
+      const channelManager = new ChannelManager();
+      const navManager = new NavigationManager();
+      window.channelManager = channelManager;
+      window.navManager = navManager;
+
+      const elChannelGrid = document.getElementById('channel-grid');
+      const elLoadingView = document.getElementById('loading-view');
+      const elCategoryBar = document.getElementById('category-bar');
+      const elLanguageBar = document.getElementById('language-bar');
+      const elStatSummary = document.getElementById('stat-summary');
+      const elSearchInput = document.getElementById('search-input');
+      const elBtnSync = document.getElementById('btn-sync');
+
+      const elSplashScreen = document.getElementById('splash-screen');
+      const elSplashStatus = document.getElementById('splash-status');
+      let splashDismissed = false;
+
+      function dismissSplashScreen() {
+        if (splashDismissed || !elSplashScreen) return;
+        splashDismissed = true;
+        if (elSplashStatus) elSplashStatus.textContent = 'Fleet Ready • Launching Nemo TV';
+        setTimeout(() => {
+          elSplashScreen.classList.add('splash-exit');
+          setTimeout(() => {
+            elSplashScreen.classList.add('hidden');
+          }, 800);
+        }, 600);
+      }
+
+      // Initialize Video Player
+      const playerHudElements = {
+        container: document.getElementById('player-hud'),
+        playerView: document.getElementById('player-view'),
+        loader: document.getElementById('player-loader'),
+        loaderLogo: document.getElementById('loader-channel-logo'),
+        loaderTitle: document.getElementById('loader-channel-name'),
+        loaderStatus: document.getElementById('loader-status'),
+        btnBack: document.getElementById('btn-player-back'),
+        channelTitle: document.getElementById('player-channel-title'),
+        channelLogo: document.getElementById('player-channel-logo'),
+        sourceBadge: document.getElementById('player-source-badge'),
+        statusBanner: document.getElementById('status-banner'),
+        btnPlayPause: document.getElementById('btn-player-play'),
+        btnReload: document.getElementById('btn-player-reload'),
+        btnNextSource: document.getElementById('btn-player-next-source'),
+        qualitySelector: document.getElementById('select-quality'),
+        audioSelector: document.getElementById('select-audio'),
+        miniEpgDrawer: document.getElementById('mini-epg-drawer'),
+        miniEpgCarousel: document.getElementById('mini-epg-carousel'),
+        miniEpgCount: document.getElementById('mini-epg-count')
+      };
+
+      const nemoPlayer = new NemoPlayer(document.getElementById('video-player'), playerHudElements);
+      window.nemoPlayer = nemoPlayer;
+
+      // Real Live EPG Cache & Fetcher (JioTV Broadcast Backend)
+      const epgCache = new Map();
+
+      async function fetchLiveEpg(tvgId) {
+        if (!tvgId || !/^\d+$/.test(String(tvgId).trim())) return null;
+        const id = String(tvgId).trim();
+        if (epgCache.has(id)) {
+          return epgCache.get(id);
+        }
+        try {
+          const resp = await fetch(`https://jiotv.data.cdn.jio.com/apis/v1.3/getepg/get?offset=0&channel_id=${id}`);
+          if (!resp.ok) return null;
+          const data = await resp.json();
+          if (data && data.epg && data.epg.length > 0) {
+            epgCache.set(id, data.epg);
+            return data.epg;
+          }
+        } catch (_) {}
+        return null;
+      }
+
+      // Set-Top Box (STB) Broadcast EPG Schedule Generator
+      function getEpgSchedule(channel) {
+        const now = Date.now();
+        const dateObj = new Date(now);
+        const h = dateObj.getHours();
+        const m = dateObj.getMinutes();
+
+        // 1. Check if real live JioTV EPG data is available in cache
+        const tvgId = channel && channel.tvgId ? String(channel.tvgId).trim() : '';
+        if (tvgId && epgCache.has(tvgId)) {
+          const epgList = epgCache.get(tvgId);
+          if (epgList && epgList.length > 0) {
+            const curProg = epgList.find(p => now >= p.startEpoch && now < p.endEpoch) || epgList[0];
+            const nextProg = epgList.find(p => p.startEpoch >= (curProg ? curProg.endEpoch : now));
+
+            if (curProg) {
+              const startEpoch = curProg.startEpoch;
+              const endEpoch = curProg.endEpoch;
+              const totalMins = Math.max(1, Math.round((endEpoch - startEpoch) / 60000));
+              const elapsedMins = Math.max(0, Math.round((now - startEpoch) / 60000));
+              const remainingMins = Math.max(1, totalMins - elapsedMins);
+              const progressPct = Math.min(100, Math.max(5, Math.round((elapsedMins / totalMins) * 100)));
+
+              const fmtEpoch = (epoch) => {
+                const d = new Date(epoch);
+                const hr = d.getHours();
+                const min = d.getMinutes();
+                const ampm = hr >= 12 ? 'PM' : 'AM';
+                const h12 = hr % 12 || 12;
+                return `${h12}:${min.toString().padStart(2, '0')} ${ampm}`;
+              };
+
+              const startTimeStr = fmtEpoch(startEpoch);
+              const endTimeStr = fmtEpoch(endEpoch);
+              const nextTitle = nextProg ? `${nextProg.showname} (${fmtEpoch(nextProg.startEpoch)} - ${fmtEpoch(nextProg.endEpoch)})` : 'Upcoming Program';
+
+              return {
+                currentTitle: curProg.showname,
+                timeRange: `${startTimeStr} - ${endTimeStr}`,
+                progressPct: progressPct,
+                remainingText: `${remainingMins} mins left`,
+                nextTitle: nextTitle,
+                isRealEpg: true
+              };
+            }
+          }
+        }
+
+        // 2. Channel-Unique Deterministic Fallback Schedule
+        // Seeded by unique channel name so NO TWO CHANNELS get the same title at the same hour!
+        const chName = (channel && channel.name) || 'Live Broadcast';
+        let nameHash = 0;
+        for (let i = 0; i < chName.length; i++) {
+          nameHash = (nameHash << 5) - nameHash + chName.charCodeAt(i);
+          nameHash |= 0;
+        }
+        const seed = Math.abs(nameHash);
+
+        const startM = m < 30 ? 0 : 30;
+        const endM = m < 30 ? 30 : 0;
+        const endH = m < 30 ? h : (h + 1) % 24;
+
+        const fmtTime = (hr, min) => {
+          const ampm = hr >= 12 ? 'PM' : 'AM';
+          const h12 = hr % 12 || 12;
+          return `${h12}:${min.toString().padStart(2, '0')} ${ampm}`;
+        };
+
+        const startTimeStr = fmtTime(h, startM);
+        const endTimeStr = fmtTime(endH, endM);
+        const nextEndTimeStr = fmtTime(endM === 30 ? endH : (endH + 1) % 24, endM === 30 ? 0 : 30);
+
+        const progressPct = Math.min(100, Math.max(10, Math.round(((m % 30) / 30) * 100)));
+        const remainingMins = Math.max(1, 30 - (m % 30));
+
+        const cat = ((channel && channel.category) || 'General').toLowerCase();
+        const lang = ((channel && channel.language) || 'General').toLowerCase();
+
+        let curTitle = `${chName} Prime Special`;
+        let nxtTitle = `${chName} Express`;
+
+        if (lang.includes('malayalam')) {
+          const malShows = [
+            'Bigg Boss Malayalam Live', 'Kudumbavilakku Mega Serial', 'Santhwanam', 'Geetha Govindam',
+            'Comedy Stars Season 3', 'Star Singer Live', 'Asianet Vartha Special', 'News Hour Live',
+            'Badai Bungalow Prime', 'Marimayam Special', 'Thatteem Mutteem', 'Super 4 Live Gala'
+          ];
+          curTitle = malShows[(seed + h) % malShows.length];
+          nxtTitle = malShows[(seed + h + 1) % malShows.length];
+        } else if (cat.includes('news')) {
+          const newsShows = [
+            'Prime Time Debate 360', 'Headlines Express Live', 'Super Fast 100 News', 'Special Ground Zero Report',
+            'The Big Fight Live', 'World Watch Global', 'Nation Wants To Know', 'India Tonight Special'
+          ];
+          curTitle = newsShows[(seed + h) % newsShows.length];
+          nxtTitle = newsShows[(seed + h + 1) % newsShows.length];
+        } else if (cat.includes('movie')) {
+          const movieShows = [
+            'Superhit Blockbuster Cinema', 'Matinee Cinema Premiere', 'Action Mega Blast', 'Evergreen Gold Classics',
+            'Weekend Cinema Carnival', 'Super Cinema Express', 'Housefull Premiere Live'
+          ];
+          curTitle = movieShows[(seed + h) % movieShows.length];
+          nxtTitle = movieShows[(seed + h + 1) % movieShows.length];
+        } else if (cat.includes('sport')) {
+          const sportsShows = [
+            'Live Match Center Special', 'Cricket Live Extra', 'Football Night Highlights', 'Super Over Grandstand',
+            'Championship Arena', 'Sports Tonight Debate', 'Classic Match Replay'
+          ];
+          curTitle = sportsShows[(seed + h) % sportsShows.length];
+          nxtTitle = sportsShows[(seed + h + 1) % sportsShows.length];
+        } else if (cat.includes('music')) {
+          const musicShows = [
+            'Non-Stop Top 20 Hits', 'Morning Melody Rhythms', 'Super Beats Live', 'Retro Golden Melodies',
+            'Trending Chartbusters Hour', 'Unplugged Live Jam', 'Musical Express'
+          ];
+          curTitle = musicShows[(seed + h) % musicShows.length];
+          nxtTitle = musicShows[(seed + h + 1) % musicShows.length];
+        } else if (cat.includes('kid')) {
+          const kidsShows = [
+            'Cartoon Superstars Carnival', 'Action Heroes Adventure', 'Animated Magic World', 'Fun Club Special',
+            'Chota Heroes Hour', 'Jungle Explorers Live'
+          ];
+          curTitle = kidsShows[(seed + h) % kidsShows.length];
+          nxtTitle = kidsShows[(seed + h + 1) % kidsShows.length];
+        } else if (chName.toLowerCase().includes('discovery') || chName.toLowerCase().includes('nat geo') || chName.toLowerCase().includes('history')) {
+          const infoShows = [
+            'Man vs Wild Expedition', 'Mega Construction Titans', 'Wild Planet Serengeti', 'Cosmos: Space & Beyond',
+            'Pawn Stars Special', 'Ancient Mysteries Revealed', 'River Monsters Live', 'Air Crash Investigation'
+          ];
+          curTitle = infoShows[(seed + h) % infoShows.length];
+          nxtTitle = infoShows[(seed + h + 1) % infoShows.length];
+        } else {
+          const genShows = [
+            'Prime Time Mega Gala', 'Super Comedy Express', 'Celebrity Spotlight Hour', 'Family Game Night',
+            'Golden Hour Serial', 'Daily Drama Showcase', 'Star Special Gala'
+          ];
+          curTitle = genShows[(seed + h) % genShows.length];
+          nxtTitle = genShows[(seed + h + 1) % genShows.length];
+        }
+
+        return {
+          currentTitle: curTitle,
+          timeRange: `${startTimeStr} - ${endTimeStr}`,
+          progressPct: progressPct,
+          remainingText: `${remainingMins} mins left`,
+          nextTitle: `${nxtTitle} (${endTimeStr} - ${nextEndTimeStr})`,
+          isRealEpg: false
+        };
+      }
+
+      // STB Info Banner Controller
+      const stbBanner = document.getElementById('stb-banner');
+      const elStbChNum = document.getElementById('stb-ch-num');
+      const elStbLogo = document.getElementById('stb-logo');
+      const elStbTitle = document.getElementById('stb-title');
+      const elStbLang = document.getElementById('stb-lang-badge');
+      const elStbCat = document.getElementById('stb-category-badge');
+      const elStbProgTitle = document.getElementById('stb-program-title');
+      const elStbProgTime = document.getElementById('stb-program-time');
+      const elStbProgressBar = document.getElementById('stb-progress-bar');
+      const elStbRemaining = document.getElementById('stb-remaining');
+      const elStbNextTitle = document.getElementById('stb-next-title');
+      const elStbSourceInfo = document.getElementById('stb-source-info');
+      let stbBannerTimeout = null;
+
+      function showStbBanner(channel) {
+        if (!stbBanner || !channel) return;
+
+        // Permanent fixed Logical Channel Number (LCN) independent of sorting or filtering
+        const masterList = (window.channelManager && window.channelManager.channels) || [];
+        let chNum = channel.channelNumber;
+        if (!chNum) {
+          const mIdx = masterList.findIndex(c => c.id === channel.id || c.name === channel.name);
+          chNum = mIdx >= 0 ? mIdx + 1 : 1;
+        }
+        const chNumber = String(chNum).padStart(3, '0');
+
+        if (elStbChNum) elStbChNum.textContent = chNumber;
+        if (elStbLogo) elStbLogo.src = channel.logo || 'icon.png';
+        if (elStbTitle) elStbTitle.textContent = channel.name;
+        if (elStbLang) elStbLang.textContent = (channel.language || 'General').toUpperCase();
+        if (elStbCat) elStbCat.textContent = (channel.category || 'General').toUpperCase();
+
+        const epg = getEpgSchedule(channel);
+        if (elStbProgTitle) elStbProgTitle.textContent = epg.currentTitle;
+        if (elStbProgTime) elStbProgTime.textContent = epg.timeRange;
+        if (elStbProgressBar) elStbProgressBar.style.width = `${epg.progressPct}%`;
+        if (elStbRemaining) elStbRemaining.textContent = epg.remainingText;
+        if (elStbNextTitle) elStbNextTitle.textContent = epg.nextTitle;
+
+        // Asynchronously fetch live real JioTV EPG if not cached yet
+        if (!epg.isRealEpg && channel && channel.tvgId) {
+          fetchLiveEpg(channel.tvgId).then(epgList => {
+            if (epgList && nemoPlayer.currentChannel && (nemoPlayer.currentChannel.id === channel.id || nemoPlayer.currentChannel.name === channel.name)) {
+              const freshEpg = getEpgSchedule(channel);
+              if (elStbProgTitle) elStbProgTitle.textContent = freshEpg.currentTitle;
+              if (elStbProgTime) elStbProgTime.textContent = freshEpg.timeRange;
+              if (elStbProgressBar) elStbProgressBar.style.width = `${freshEpg.progressPct}%`;
+              if (elStbRemaining) elStbRemaining.textContent = freshEpg.remainingText;
+              if (elStbNextTitle) elStbNextTitle.textContent = freshEpg.nextTitle;
+            }
+          });
+        }
+
+        if (elStbSourceInfo) {
+          const sCount = channel.sources ? channel.sources.length : 1;
+          const sCur = nemoPlayer.currentSourceIndex + 1;
+          const sName = (channel.sources && channel.sources[nemoPlayer.currentSourceIndex] && channel.sources[nemoPlayer.currentSourceIndex].playlistName) || 'Jio Direct';
+          elStbSourceInfo.textContent = `Source ${sCur}/${sCount} (${sName})`;
+        }
+
+        stbBanner.classList.remove('hidden');
+        clearTimeout(stbBannerTimeout);
+        stbBannerTimeout = setTimeout(() => {
+          if (stbBanner) stbBanner.classList.add('hidden');
+        }, 4500);
+      }
+
+      function toggleStbBanner() {
+        if (!stbBanner) return;
+        if (stbBanner.classList.contains('hidden')) {
+          showStbBanner(nemoPlayer.currentChannel);
+        } else {
+          stbBanner.classList.add('hidden');
+        }
+      }
+
+      window.showStbBanner = showStbBanner;
+      window.toggleStbBanner = toggleStbBanner;
+
+      // Hook up dedicated remote channel switching & STB banner toggling
+      navManager.onChannelChange((dir) => {
+        if (dir === 'next') {
+          nemoPlayer.nextChannel();
+        } else {
+          nemoPlayer.prevChannel();
+        }
+        showStbBanner(nemoPlayer.currentChannel);
+      });
+
+      navManager.onToggleOsd(() => {
+        toggleStbBanner();
+      });
+
+      // Hook up direct numeric keypad channel tuning (0-9 remote keys)
+      navManager.onDirectChannelTune((channel) => {
+        if (!channel) return;
+        if (typeof toggleMiniEpg === 'function') {
+          toggleMiniEpg(false);
+        }
+        const v = document.getElementById('video-player');
+        if (v) { try { v.muted = false; v.volume = 1.0; } catch (_) {} }
+        nemoPlayer.playChannel(channel);
+        showStbBanner(channel);
+      });
+
+      function updateMiniEpgFocusPreview(channel, cardElement) {
+        if (!channel) return;
+        const elFocusNum = document.getElementById('mini-focus-num');
+        const elFocusName = document.getElementById('mini-focus-name');
+        const elFocusCat = document.getElementById('mini-focus-cat');
+        const elFocusProg = document.getElementById('mini-focus-prog');
+        const elFocusTime = document.getElementById('mini-focus-time');
+        const elFocusNext = document.getElementById('mini-focus-next');
+
+        const chNo = String(channel.channelNumber || 1).padStart(3, '0');
+        if (elFocusNum) elFocusNum.textContent = `#${chNo}`;
+        if (elFocusName) elFocusName.textContent = channel.name;
+        if (elFocusCat) elFocusCat.textContent = (channel.category || 'General').toUpperCase();
+
+        const epg = getEpgSchedule(channel);
+        if (elFocusProg) elFocusProg.textContent = epg.currentTitle;
+        if (elFocusTime) elFocusTime.textContent = epg.timeRange;
+        if (elFocusNext) elFocusNext.textContent = `NEXT: ${epg.nextTitle}`;
+
+        // Fetch live JioTV EPG if available
+        if (!epg.isRealEpg && channel.tvgId) {
+          fetchLiveEpg(channel.tvgId).then(epgList => {
+            if (epgList) {
+              const fresh = getEpgSchedule(channel);
+              if (elFocusProg) elFocusProg.textContent = fresh.currentTitle;
+              if (elFocusTime) elFocusTime.textContent = fresh.timeRange;
+              if (elFocusNext) elFocusNext.textContent = `NEXT: ${fresh.nextTitle}`;
+              if (cardElement) {
+                const prog = cardElement.querySelector('.mini-item-prog');
+                const time = cardElement.querySelector('.mini-item-time');
+                if (prog) prog.textContent = `📺 ${fresh.currentTitle}`;
+                if (time) time.textContent = fresh.timeRange;
+              }
+            }
+          });
+        }
+      }
+      window.updateMiniEpgFocusPreview = updateMiniEpgFocusPreview;
+
+      let miniEpgVisible = false;
+      function toggleMiniEpg(force) {
+        if (!playerHudElements.miniEpgDrawer) return;
+        miniEpgVisible = typeof force === 'boolean' ? force : !miniEpgVisible;
+        if (miniEpgVisible) {
+          renderMiniEpg(nemoPlayer.currentChannel);
+          playerHudElements.miniEpgDrawer.classList.remove('hidden');
+          setTimeout(() => {
+            const active = playerHudElements.miniEpgCarousel.querySelector('.active-channel') ||
+                           playerHudElements.miniEpgCarousel.querySelector('.mini-epg-item');
+            if (active) {
+              navManager.setFocus(active);
+              active.scrollIntoView({ behavior: 'auto', block: 'nearest', inline: 'center' });
+              if (active._channelData) {
+                updateMiniEpgFocusPreview(active._channelData, active);
+              }
+            }
+          }, 50);
+        } else {
+          playerHudElements.miniEpgDrawer.classList.add('hidden');
+        }
+      }
+      window.toggleMiniEpg = toggleMiniEpg;
+
+      function renderMiniEpg(currentCh) {
+        if (!playerHudElements.miniEpgCarousel) return;
+        playerHudElements.miniEpgCarousel.innerHTML = '';
+        const list = nemoPlayer.channelList && nemoPlayer.channelList.length > 0 ?
+                     nemoPlayer.channelList :
+                     channelManager.channels.filter(c => !c.isMovie);
+
+        if (playerHudElements.miniEpgCount) {
+          playerHudElements.miniEpgCount.textContent = `${list.length} Channels`;
+        }
+
+        list.slice(0, 150).forEach(ch => {
+          const item = document.createElement('div');
+          item.className = `mini-epg-item ${currentCh && (currentCh.id === ch.id || currentCh.name === ch.name) ? 'active-channel' : ''}`;
+          item.tabIndex = 0;
+          item._channelData = ch;
+          const chNo = String(ch.channelNumber || 1).padStart(3, '0');
+          const epg = getEpgSchedule(ch);
+
+          item.innerHTML = `
+            <div class="mini-item-top">
+              <span class="mini-epg-num">#${chNo}</span>
+              <img src="${ch.logo || 'icon.png'}" alt="${ch.name}" onerror="this.src='icon.png';" loading="lazy" />
+              <span class="epg-item-name" title="${ch.name}">${ch.name}</span>
+            </div>
+            <div class="mini-item-prog" title="${epg.currentTitle}">📺 ${epg.currentTitle}</div>
+            <div class="mini-item-time">${epg.timeRange}</div>
+          `;
+          item.addEventListener('focus', () => {
+            updateMiniEpgFocusPreview(ch, item);
+          });
+          item.addEventListener('click', () => {
+            const v = document.getElementById('video-player');
+            if (v) { try { v.muted = false; v.volume = 1.0; } catch (_) {} }
+            nemoPlayer.playChannel(ch);
+            showStbBanner(ch);
+            toggleMiniEpg(false);
+          });
+          playerHudElements.miniEpgCarousel.appendChild(item);
+        });
+
+        if (currentCh) {
+          updateMiniEpgFocusPreview(currentCh);
+        }
+
+        // Update audio UI on drawer open
+        nemoPlayer.updateAudioUI();
+      }
+
+      // Wire audio button click events
+      const elStbAudioBtn = document.getElementById('stb-audio-btn');
+      if (elStbAudioBtn) {
+        elStbAudioBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          nemoPlayer.cycleAudioTrack();
+        });
+      }
+
+      const elMiniEpgAudioBtn = document.getElementById('mini-epg-audio-btn');
+      if (elMiniEpgAudioBtn) {
+        elMiniEpgAudioBtn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          nemoPlayer.cycleAudioTrack();
+        });
+      }
+
+      // Handle Back Button: if mini-EPG open, close mini-EPG; else if player open, close player; else exit app
+      navManager.onBack(() => {
+        if (miniEpgVisible) {
+          toggleMiniEpg(false);
+          return true;
+        }
+        if (!playerHudElements.playerView.classList.contains('hidden') || document.body.classList.contains('player-mode')) {
+          nemoPlayer.stopAndClose();
+          navManager.restoreLastCardFocus();
+          return true;
+        }
+        return false;
+      });
+
+      nemoPlayer.onClose(() => {
+        toggleMiniEpg(false);
+        navManager.restoreLastCardFocus();
+      });
+
+      let currentSection = 'live'; // 'live' | 'vod'
+      let currentCategory = 'All Channels';
+      let currentLanguage = 'All Languages';
+
+      function setSection(section) {
+        currentSection = section;
+        currentCategory = section === 'vod' ? 'All Movies' : 'All Channels';
+        currentLanguage = 'All Languages';
+
+        document.querySelectorAll('.section-btn').forEach(btn => {
+          btn.classList.toggle('active', btn.dataset.section === section);
+        });
+
+        refreshBars();
+        applyFiltersAndRender();
+      }
+
+      function refreshBars() {
+        renderCategories(channelManager.getCategories(currentSection));
+        renderLanguages(channelManager.getLanguages(currentSection));
+      }
+
+      document.querySelectorAll('.section-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+          setSection(btn.dataset.section);
+        });
+      });
+
+      function applyFiltersAndRender() {
+        const query = elSearchInput.value.trim();
+        const filtered = channelManager.getFilteredChannels({
+          section: currentSection,
+          category: currentCategory,
+          language: currentLanguage,
+          query: query
+        });
+        renderChannels(filtered);
+      }
+
+      function renderCategories(categories) {
+        elCategoryBar.innerHTML = '';
+        categories.forEach(cat => {
+          const btn = document.createElement('button');
+          btn.className = `category-chip ${cat === currentCategory ? 'active' : ''}`;
+          btn.textContent = cat;
+          btn.dataset.category = cat;
+          btn.addEventListener('click', () => {
+            currentCategory = cat;
+            document.querySelectorAll('.category-chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            applyFiltersAndRender();
+          });
+          elCategoryBar.appendChild(btn);
+        });
+      }
+
+      function renderLanguages(languages) {
+        if (!elLanguageBar) return;
+        elLanguageBar.innerHTML = '';
+        languages.forEach(lang => {
+          const btn = document.createElement('button');
+          btn.className = `language-chip ${lang === currentLanguage ? 'active' : ''}`;
+          btn.textContent = lang === 'All Languages' ? '🌐 All Languages' : lang;
+          btn.dataset.language = lang;
+          btn.addEventListener('click', () => {
+            currentLanguage = lang;
+            document.querySelectorAll('.language-chip').forEach(c => c.classList.remove('active'));
+            btn.classList.add('active');
+            applyFiltersAndRender();
+          });
+          elLanguageBar.appendChild(btn);
+        });
+      }
+
+      let currentChannelList = [];
+      let renderedCardCount = 0;
+      const INITIAL_BATCH_SIZE = 30;
+      const BATCH_INCREMENT = 25;
+
+      function createCardElement(ch) {
+        const card = document.createElement('div');
+        if (ch.isMovie) {
+          card.className = 'channel-card movie-card';
+          card.tabIndex = 0;
+          card.innerHTML = `
+            <div class="movie-poster-box">
+              <img class="movie-poster-img" src="${ch.logo || 'icon.png'}" alt="${ch.name}" onerror="this.src='icon.png';" loading="lazy" />
+              <div class="movie-poster-overlay">
+                <div class="movie-play-icon">▶</div>
+              </div>
+              ${ch.year ? `<span class="poster-badge-year">${ch.year}</span>` : ''}
+              ${ch.rating ? `<span class="poster-badge-rating">⭐ ${ch.rating}</span>` : ''}
+            </div>
+            <div class="movie-info">
+              <div class="movie-title" title="${ch.name}">${ch.name}</div>
+              <div class="movie-meta">
+                <span class="movie-badge-lang">${ch.language || 'General'}</span>
+                <span class="movie-badge-vod">🎬 VOD</span>
+              </div>
+            </div>
+          `;
+        } else {
+          card.className = 'channel-card';
+          card.tabIndex = 0;
+          const sourcesCount = ch.sources ? ch.sources.length : 1;
+          const sourceBadgeText = `${sourcesCount} ${sourcesCount > 1 ? 'Sources' : 'Source'}`;
+          const chNo = String(ch.channelNumber || 1).padStart(3, '0');
+
+          card.innerHTML = `
+            <div class="logo-box">
+              <span class="card-ch-number">#${chNo}</span>
+              <img src="${ch.logo || 'icon.png'}" alt="${ch.name}" onerror="this.src='icon.png';" loading="lazy" />
+            </div>
+            <div class="channel-name" title="${ch.name}">${ch.name}</div>
+            <div class="card-footer">
+              <span class="badge-source">${sourceBadgeText}</span>
+              <span class="badge-language">${ch.language || 'General'}</span>
+              <span class="badge-category">${ch.category || 'General'}</span>
+            </div>
+          `;
+        }
+
+        card.addEventListener('click', () => {
+          const v = document.getElementById('video-player');
+          if (v) {
+            try {
+              v.muted = false;
+              v.volume = 1.0;
+            } catch (_) {}
+          }
+          navManager.setFocus(card);
+          nemoPlayer.playChannel(ch);
+          showStbBanner(ch);
+        });
+
+        return card;
+      }
+
+      function loadMoreCards(count = BATCH_INCREMENT) {
+        if (!currentChannelList || renderedCardCount >= currentChannelList.length) return false;
+        const nextBatch = currentChannelList.slice(renderedCardCount, renderedCardCount + count);
+        const fragment = document.createDocumentFragment();
+        nextBatch.forEach(ch => {
+          fragment.appendChild(createCardElement(ch));
+        });
+        elChannelGrid.appendChild(fragment);
+        renderedCardCount += nextBatch.length;
+        return true;
+      }
+      window.loadMoreCards = loadMoreCards;
+
+      function renderChannels(channels) {
+        currentChannelList = channels || [];
+        renderedCardCount = 0;
+        elChannelGrid.innerHTML = '';
+        elLoadingView.classList.add('hidden');
+
+        // Toggle VOD grid mode for responsive 7-column poster layout
+        elChannelGrid.classList.toggle('vod-mode', currentSection === 'vod');
+
+        // Update player's active channel list for channel surfing
+        nemoPlayer.setChannelList(channels);
+
+        if (!channels || channels.length === 0) {
+          elChannelGrid.innerHTML = `
+            <div style="grid-column: 1 / -1; text-align: center; padding: 60px;">
+              <h3 style="color: var(--text-secondary); font-size: 22px;">No ${currentSection === 'vod' ? 'movies' : 'channels'} found matching the selection.</h3>
+            </div>
+          `;
+          return;
+        }
+
+        // Render initial lightweight batch (30 cards) for instant rendering
+        loadMoreCards(INITIAL_BATCH_SIZE);
+
+        // Set initial TV focus to first card if none focused
+        const firstCard = elChannelGrid.querySelector('.channel-card');
+        if (firstCard && (!navManager.currentFocusElement || !document.body.contains(navManager.currentFocusElement))) {
+          navManager.setFocus(firstCard);
+        }
+      }
+
+      function updateStats() {
+        const liveCount = channelManager.channels.filter(c => !c.isMovie).length;
+        const movieCount = channelManager.channels.filter(c => c.isMovie).length;
+        const sourcesCount = channelManager.channels.reduce((sum, ch) => sum + ch.sources.length, 0);
+        elStatSummary.textContent = `${liveCount} Live Channels • ${movieCount} Movies • ${sourcesCount} Sources`;
+      }
+
+      // Search Filter
+      elSearchInput.addEventListener('input', () => {
+        applyFiltersAndRender();
+      });
+
+      // Manual Sync Button
+      elBtnSync.addEventListener('click', async () => {
+        elBtnSync.disabled = true;
+        elBtnSync.querySelector('span:last-child').textContent = 'Syncing...';
+        await channelManager.syncAllPlaylists();
+        elBtnSync.disabled = false;
+        elBtnSync.querySelector('span:last-child').textContent = 'Sync Playlists';
+      });
+
+      // Listen for sync events without wiping active DOM or stealing focus
+      channelManager.addListener((event, data) => {
+        if (event === 'sync_start') {
+          elStatSummary.textContent = 'Syncing fast playlist (Terminal JioTV Direct DRM)...';
+          if (elSplashStatus) elSplashStatus.textContent = 'Connecting to JioTV High Priority Fleet...';
+        } else if (event === 'sync_progress' || event === 'sync_complete') {
+          updateStats();
+          // DO NOT wipe the DOM grid while user is browsing or watching TV!
+          // Only render if grid is currently empty
+          const existingCards = elChannelGrid.querySelectorAll('.channel-card');
+          if (existingCards.length === 0) {
+            refreshBars();
+            applyFiltersAndRender();
+          }
+          if (event === 'sync_progress') {
+            elStatSummary.textContent = `${channelManager.channels.length} Channels • Merging in background...`;
+            if (elSplashStatus) elSplashStatus.textContent = `Loaded ${channelManager.channels.length} Channels...`;
+            dismissSplashScreen();
+          } else if (event === 'sync_complete') {
+            dismissSplashScreen();
+          }
+        }
+      });
+
+      // 1. Try to load cached channels immediately for instant boot
+      const hasCache = channelManager.loadCachedChannels();
+      if (hasCache) {
+        refreshBars();
+        applyFiltersAndRender();
+        updateStats();
+        // Instant boot with smooth splash transition
+        setTimeout(dismissSplashScreen, 1200);
+      } else {
+        // Fallback safety: dismiss splash after 4s max even if offline
+        setTimeout(dismissSplashScreen, 4000);
+      }
+
+      // 2. Fetch fresh playlists in background
+      await channelManager.syncAllPlaylists();
+    });
+  </script>
+</body>
+</html>
