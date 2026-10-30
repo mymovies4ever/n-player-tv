@@ -20,8 +20,18 @@ import com.nemotv.player.data.model.StreamSource
 import java.nio.charset.StandardCharsets
 import java.util.Base64
 
+import androidx.media3.datasource.HttpDataSource
+import com.nemotv.player.data.repository.ChannelRepository
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.cancel
+import kotlinx.coroutines.launch
+
 @OptIn(UnstableApi::class)
-class NemoExoPlayer(private val context: Context) {
+class NemoExoPlayer(
+    private val context: Context,
+    private val repository: ChannelRepository? = null
+) {
 
     var exoPlayer: ExoPlayer? = null
         private set
@@ -30,6 +40,9 @@ class NemoExoPlayer(private val context: Context) {
         private set
     var currentSourceIndex: Int = 0
         private set
+
+    private val playerScope = CoroutineScope(Dispatchers.Main)
+    private var isRefreshingTokens = false
 
     var onStateChanged: ((isPlaying: Boolean, isBuffering: Boolean, errorMsg: String?) -> Unit)? = null
     var onSourceSwitched: ((sourceIndex: Int, totalSources: Int) -> Unit)? = null
@@ -65,6 +78,29 @@ class NemoExoPlayer(private val context: Context) {
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
+                    val cause = error.cause
+                    val isAuthFailure = (cause is HttpDataSource.InvalidResponseCodeException &&
+                            (cause.responseCode == 401 || cause.responseCode == 403))
+
+                    if (isAuthFailure && repository != null && !isRefreshingTokens) {
+                        isRefreshingTokens = true
+                        onStateChanged?.invoke(false, true, "Refreshing Live Stream Token...")
+                        playerScope.launch {
+                            val ok = repository.refreshLiveTokens()
+                            isRefreshingTokens = false
+                            if (ok) {
+                                val ch = currentChannel
+                                val updatedCh = repository.allChannels.firstOrNull { it.id == ch?.id }
+                                if (updatedCh != null) {
+                                    playChannel(updatedCh, 0)
+                                    return@launch
+                                }
+                            }
+                            switchNextSource("Token expired / Auth failure")
+                        }
+                        return
+                    }
+
                     onStateChanged?.invoke(false, false, error.message)
                     // Trigger auto-failover
                     switchNextSource("Playback error")
@@ -83,6 +119,28 @@ class NemoExoPlayer(private val context: Context) {
         }
 
         val source = sources.getOrElse(sourceIdx) { sources[0] }
+
+        // Check if token has an expired exp timestamp
+        val cookie = source.headers?.get("Cookie") ?: ""
+        val expMatch = Regex("exp=(\\d+)").find(cookie + " " + source.url)
+        val expTime = expMatch?.groupValues?.get(1)?.toLongOrNull()
+        val nowSec = System.currentTimeMillis() / 1000
+
+        if (expTime != null && expTime < nowSec && repository != null && !isRefreshingTokens) {
+            isRefreshingTokens = true
+            onStateChanged?.invoke(false, true, "Updating Stream Security Token...")
+            playerScope.launch {
+                repository.refreshLiveTokens()
+                isRefreshingTokens = false
+                val updatedCh = repository.allChannels.firstOrNull { it.id == channel.id } ?: channel
+                currentChannel = updatedCh
+                val s = updatedCh.sources.getOrElse(sourceIdx) { updatedCh.sources.firstOrNull() ?: source }
+                playSource(s)
+                onSourceSwitched?.invoke(sourceIdx, updatedCh.sources.size)
+            }
+            return
+        }
+
         playSource(source)
         onSourceSwitched?.invoke(sourceIdx, sources.size)
     }
@@ -203,6 +261,7 @@ class NemoExoPlayer(private val context: Context) {
     }
 
     fun release() {
+        playerScope.cancel()
         exoPlayer?.release()
         exoPlayer = null
     }

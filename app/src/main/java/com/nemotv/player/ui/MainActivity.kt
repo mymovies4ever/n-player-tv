@@ -51,7 +51,7 @@ class MainActivity : ComponentActivity() {
         hideSystemUI()
 
         repository = ChannelRepository(applicationContext)
-        nemoPlayer = NemoExoPlayer(applicationContext)
+        nemoPlayer = NemoExoPlayer(applicationContext, repository)
 
         setContent {
             NemoTVTheme {

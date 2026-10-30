@@ -15,6 +15,10 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import kotlin.math.abs
 
+import java.io.File
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.launch
+
 class ChannelRepository(private val context: Context) {
 
     private val json = Json {
@@ -23,9 +27,14 @@ class ChannelRepository(private val context: Context) {
     }
 
     private val httpClient = OkHttpClient.Builder()
-        .connectTimeout(12, TimeUnit.SECONDS)
-        .readTimeout(15, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(20, TimeUnit.SECONDS)
         .build()
+
+    companion object {
+        const val LIVE_PLAYLIST_URL = "https://m3u8playlistterminal-jiotv.lovable.app/api/playlist"
+        private const val CACHE_FILE_NAME = "channels_cache.json"
+    }
 
     var allChannels: List<Channel> = emptyList()
         private set
@@ -33,23 +42,169 @@ class ChannelRepository(private val context: Context) {
     val categories: MutableList<String> = mutableListOf("All Channels")
     val languages: MutableList<String> = mutableListOf("All Languages")
 
+    var onChannelsUpdated: (() -> Unit)? = null
+
     suspend fun initialize(): List<Channel> = withContext(Dispatchers.IO) {
         if (allChannels.isNotEmpty()) return@withContext allChannels
 
+        // 1. Try loading cached channels if present
+        val cached = loadFromDiskCache()
+        if (cached != null && cached.isNotEmpty()) {
+            allChannels = cached
+            extractFilters()
+        } else {
+            // 2. Fall back to bundled assets
+            try {
+                val assetStream = context.assets.open("channels.json")
+                val content = assetStream.bufferedReader().use { it.readText() }
+                val list = json.decodeFromString<List<Channel>>(content)
+                allChannels = list.mapIndexed { idx, ch ->
+                    ch.copy(channelNumber = idx + 1)
+                }
+                extractFilters()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        // 3. Asynchronously trigger fresh live token fetch
+        refreshLiveTokensAsync()
+
+        allChannels
+    }
+
+    fun refreshLiveTokensAsync() {
+        CoroutineScope(Dispatchers.IO).launch {
+            refreshLiveTokens()
+        }
+    }
+
+    suspend fun refreshLiveTokens(): Boolean = withContext(Dispatchers.IO) {
         try {
-            val assetStream = context.assets.open("channels.json")
-            val content = assetStream.bufferedReader().use { it.readText() }
-            val list = json.decodeFromString<List<Channel>>(content)
-            
-            allChannels = list.mapIndexed { idx, ch ->
-                ch.copy(channelNumber = idx + 1)
+            val req = Request.Builder()
+                .url("$LIVE_PLAYLIST_URL?t=${System.currentTimeMillis()}")
+                .header("User-Agent", "NemoTV/2.0 (Android)")
+                .build()
+
+            val response = httpClient.newCall(req).execute()
+            if (!response.isSuccessful) return@withContext false
+
+            val m3uText = response.body?.string() ?: return@withContext false
+            val liveSources = parseM3uLiveSources(m3uText)
+            if (liveSources.isEmpty()) return@withContext false
+
+            val updated = allChannels.map { ch ->
+                val normName = ch.name.lowercase(Locale.ROOT).replace(Regex("[^a-z0-9]"), "")
+                val freshSource = liveSources[ch.tvgId] ?: liveSources[normName]
+
+                if (freshSource != null) {
+                    val remaining = ch.sources.filter { it.url != freshSource.url }
+                    ch.copy(sources = listOf(freshSource) + remaining)
+                } else {
+                    ch
+                }
             }
 
+            allChannels = updated
+            saveToDiskCache(updated)
             extractFilters()
+            withContext(Dispatchers.Main) {
+                onChannelsUpdated?.invoke()
+            }
+            true
         } catch (e: Exception) {
             e.printStackTrace()
+            false
         }
-        allChannels
+    }
+
+    private fun parseM3uLiveSources(content: String): Map<String, com.nemotv.player.data.model.StreamSource> {
+        val map = mutableMapOf<String, com.nemotv.player.data.model.StreamSource>()
+        val lines = content.split('\n')
+
+        var curTvgId: String? = null
+        var curName: String? = null
+        var curLicenseKey: String? = null
+        var curCookie: String? = null
+        var curUa: String = "Premium Plugx"
+
+        val tvgIdRegex = Regex("""tvg-id="([^"]+)"""")
+        val tvgNameRegex = Regex("""tvg-name="([^"]+)"""")
+
+        for (rawLine in lines) {
+            val line = rawLine.trim()
+            if (line.isEmpty()) continue
+
+            if (line.startsWith("#EXTINF:")) {
+                curLicenseKey = null
+                curCookie = null
+                curUa = "Premium Plugx"
+
+                val idMatch = tvgIdRegex.find(line)
+                val nameMatch = tvgNameRegex.find(line)
+                val commaIdx = line.lastIndexOf(',')
+                val title = if (commaIdx != -1) line.substring(commaIdx + 1).trim() else ""
+
+                curTvgId = idMatch?.groupValues?.get(1)?.trim()
+                curName = (nameMatch?.groupValues?.get(1)?.trim() ?: title).lowercase(Locale.ROOT)
+            } else if (line.startsWith("#KODIPROP:inputstream.adaptive.license_key=")) {
+                curLicenseKey = line.substringAfter('=').trim()
+            } else if (line.startsWith("#EXTVLCOPT:http-user-agent=")) {
+                curUa = line.substringAfter('=').trim()
+            } else if (line.startsWith("#EXTHTTP:")) {
+                try {
+                    val jsonPart = line.substring(9).trim()
+                    val cookieMatch = Regex(""""cookie"\s*:\s*"([^"]+)"""").find(jsonPart)
+                    curCookie = cookieMatch?.groupValues?.get(1)
+                } catch (_: Exception) {}
+            } else if (!line.startsWith("#") && line.startsWith("http")) {
+                val headers = mutableMapOf("User-Agent" to curUa)
+                if (!curCookie.isNullOrBlank()) {
+                    headers["Cookie"] = curCookie
+                }
+
+                val drmConfig = if (!curLicenseKey.isNullOrBlank()) {
+                    com.nemotv.player.data.model.DrmConfig(type = "clearkey", key = curLicenseKey)
+                } else null
+
+                val manifestType = if (line.contains(".mpd", ignoreCase = true)) "mpd" else "hls"
+
+                val source = com.nemotv.player.data.model.StreamSource(
+                    url = line,
+                    manifestType = manifestType,
+                    drm = drmConfig,
+                    headers = headers,
+                    playlistName = "Live Terminal JioTV"
+                )
+
+                if (!curTvgId.isNullOrBlank()) {
+                    map[curTvgId] = source
+                }
+                if (!curName.isNullOrBlank()) {
+                    val norm = curName.replace(Regex("[^a-z0-9]"), "")
+                    map[norm] = source
+                }
+            }
+        }
+        return map
+    }
+
+    private fun loadFromDiskCache(): List<Channel>? {
+        return try {
+            val file = File(context.filesDir, CACHE_FILE_NAME)
+            if (!file.exists()) return null
+            val text = file.readText()
+            json.decodeFromString<List<Channel>>(text)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    private fun saveToDiskCache(channels: List<Channel>) {
+        try {
+            val file = File(context.filesDir, CACHE_FILE_NAME)
+            file.writeText(json.encodeToString(channels))
+        } catch (_: Exception) {}
     }
 
     private fun extractFilters() {

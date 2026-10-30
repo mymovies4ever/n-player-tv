@@ -54,6 +54,7 @@ fun TVPlayerScreen(
 ) {
     val context = LocalContext.current
     var isBuffering by remember { mutableStateOf(true) }
+    var bufferingMessage by remember { mutableStateOf<String?>("Tuning to Broadcast Stream...") }
     var errorMessage by remember { mutableStateOf<String?>(null) }
     var showStbBanner by remember { mutableStateOf(true) }
     var activeSourceIndex by remember { mutableIntStateOf(0) }
@@ -63,6 +64,7 @@ fun TVPlayerScreen(
     LaunchedEffect(channel) {
         focusedChannelForPreview = channel
         showStbBanner = true
+        bufferingMessage = "Tuning to Broadcast Stream..."
         nemoPlayer.playChannel(channel, 0)
     }
 
@@ -76,9 +78,14 @@ fun TVPlayerScreen(
 
     // Listen to player state
     DisposableEffect(nemoPlayer) {
-        nemoPlayer.onStateChanged = { _, buffering, err ->
+        nemoPlayer.onStateChanged = { _, buffering, msg ->
             isBuffering = buffering
-            errorMessage = err
+            if (buffering) {
+                bufferingMessage = msg ?: "Tuning to Broadcast Stream..."
+                errorMessage = null
+            } else {
+                errorMessage = msg
+            }
         }
         nemoPlayer.onSourceSwitched = { sIdx, _ ->
             activeSourceIndex = sIdx
@@ -186,7 +193,7 @@ fun TVPlayerScreen(
                     )
                     Spacer(modifier = Modifier.height(14.dp))
                     Text(
-                        text = "Tuning to Broadcast Stream...",
+                        text = bufferingMessage ?: "Tuning to Broadcast Stream...",
                         color = FocusCyan,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.Bold
