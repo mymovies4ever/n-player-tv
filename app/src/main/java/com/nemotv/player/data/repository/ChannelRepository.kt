@@ -18,6 +18,7 @@ import kotlin.math.abs
 import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
+import kotlinx.serialization.encodeToString
 
 class ChannelRepository(private val context: Context) {
 
@@ -203,7 +204,7 @@ class ChannelRepository(private val context: Context) {
     private fun saveToDiskCache(channels: List<Channel>) {
         try {
             val file = File(context.filesDir, CACHE_FILE_NAME)
-            file.writeText(json.encodeToString(channels))
+            file.writeText(json.encodeToString<List<Channel>>(channels))
         } catch (_: Exception) {}
     }
 
