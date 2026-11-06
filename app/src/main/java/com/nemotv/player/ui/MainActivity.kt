@@ -47,7 +47,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         hideSystemUI()
 
         repository = ChannelRepository(applicationContext)
@@ -87,7 +86,8 @@ class MainActivity : ComponentActivity() {
                             },
                             onBackToGuide = {
                                 isPlayingVideo.value = false
-                                nemoPlayer.exoPlayer?.pause()
+                                window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                                nemoPlayer.stop()
                             }
                         )
                     } else {
@@ -97,6 +97,7 @@ class MainActivity : ComponentActivity() {
                                 activeChannelState.value = ch
                                 isPlayingVideo.value = true
                                 isMiniEpgOpen.value = false
+                                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
                             }
                         )
                     }
@@ -170,7 +171,8 @@ class MainActivity : ComponentActivity() {
                         return true
                     }
                     isPlayingVideo.value = false
-                    nemoPlayer.exoPlayer?.pause()
+                    window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+                    nemoPlayer.stop()
                     return true
                 }
                 val now = System.currentTimeMillis()
@@ -210,6 +212,7 @@ class MainActivity : ComponentActivity() {
                 activeChannelState.value = target
                 isPlayingVideo.value = true
                 isMiniEpgOpen.value = false
+                window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
             } else {
                 Toast.makeText(this, "Channel #$num not found", Toast.LENGTH_SHORT).show()
             }
@@ -226,6 +229,7 @@ class MainActivity : ComponentActivity() {
             val nextIdx = (currentIdx + delta + list.size) % list.size
             activeChannelState.value = list[nextIdx]
             isPlayingVideo.value = true
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
         }
     }
 
@@ -241,6 +245,28 @@ class MainActivity : ComponentActivity() {
     override fun onWindowFocusChanged(hasFocus: Boolean) {
         super.onWindowFocusChanged(hasFocus)
         if (hasFocus) hideSystemUI()
+    }
+
+    override fun onPause() {
+        super.onPause()
+        nemoPlayer.pause()
+    }
+
+    override fun onStop() {
+        super.onStop()
+        // Stop playback and release hardware decoders (MediaCodec) when in background
+        nemoPlayer.stop()
+        window.clearFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+    }
+
+    override fun onResume() {
+        super.onResume()
+        hideSystemUI()
+        // Resume playing if returning to active player screen
+        if (isPlayingVideo.value && activeChannelState.value != null) {
+            window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
+            nemoPlayer.playChannel(activeChannelState.value!!, nemoPlayer.currentSourceIndex)
+        }
     }
 
     override fun onDestroy() {

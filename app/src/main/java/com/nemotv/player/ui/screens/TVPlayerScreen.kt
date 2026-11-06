@@ -93,6 +93,7 @@ fun TVPlayerScreen(
         onDispose {
             nemoPlayer.onStateChanged = null
             nemoPlayer.onSourceSwitched = null
+            nemoPlayer.stop()
         }
     }
 
@@ -130,6 +131,9 @@ fun TVPlayerScreen(
                 },
                 update = { view ->
                     view.player = nemoPlayer.exoPlayer
+                },
+                onRelease = { view ->
+                    view.player = null
                 }
             )
         }
@@ -233,7 +237,7 @@ fun TVPlayerScreen(
 
                         // Logo
                         AsyncImage(
-                            model = ImageRequest.Builder(context).data(channel.logo).crossfade(true).build(),
+                            model = ImageRequest.Builder(context).data(channel.logo).size(120, 120).crossfade(true).build(),
                             contentDescription = channel.name,
                             contentScale = ContentScale.Fit,
                             modifier = Modifier
@@ -469,7 +473,11 @@ fun TVPlayerScreen(
                                         fontWeight = FontWeight.Bold
                                     )
                                     AsyncImage(
-                                        model = ch.logo,
+                                        model = ImageRequest.Builder(LocalContext.current)
+                                            .data(ch.logo)
+                                            .size(64, 64)
+                                            .crossfade(true)
+                                            .build(),
                                         contentDescription = ch.name,
                                         modifier = Modifier.size(24.dp)
                                     )

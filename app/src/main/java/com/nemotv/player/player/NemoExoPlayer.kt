@@ -43,6 +43,7 @@ class NemoExoPlayer(
 
     private val playerScope = CoroutineScope(Dispatchers.Main)
     private var isRefreshingTokens = false
+    private var hasRefreshedTokenForCurrentChannel = false
 
     var onStateChanged: ((isPlaying: Boolean, isBuffering: Boolean, errorMsg: String?) -> Unit)? = null
     var onSourceSwitched: ((sourceIndex: Int, totalSources: Int) -> Unit)? = null
@@ -82,7 +83,8 @@ class NemoExoPlayer(
                     val isAuthFailure = (cause is HttpDataSource.InvalidResponseCodeException &&
                             (cause.responseCode == 401 || cause.responseCode == 403))
 
-                    if (isAuthFailure && repository != null && !isRefreshingTokens) {
+                    if (isAuthFailure && repository != null && !isRefreshingTokens && !hasRefreshedTokenForCurrentChannel) {
+                        hasRefreshedTokenForCurrentChannel = true
                         isRefreshingTokens = true
                         onStateChanged?.invoke(false, true, "Refreshing Live Stream Token...")
                         playerScope.launch {
@@ -96,20 +98,23 @@ class NemoExoPlayer(
                                     return@launch
                                 }
                             }
-                            switchNextSource("Token expired / Auth failure")
+                            switchNextSource("Token expired / Auth failure", isAutoFailover = true)
                         }
                         return
                     }
 
                     onStateChanged?.invoke(false, false, error.message)
-                    // Trigger auto-failover
-                    switchNextSource("Playback error")
+                    // Trigger bounded auto-failover (does not loop infinitely)
+                    switchNextSource("Playback error: ${error.errorCodeName}", isAutoFailover = true)
                 }
             })
         }
     }
 
     fun playChannel(channel: Channel, sourceIdx: Int = 0) {
+        if (currentChannel?.id != channel.id) {
+            hasRefreshedTokenForCurrentChannel = false
+        }
         currentChannel = channel
         currentSourceIndex = sourceIdx
         val sources = channel.sources
@@ -126,7 +131,8 @@ class NemoExoPlayer(
         val expTime = expMatch?.groupValues?.get(1)?.toLongOrNull()
         val nowSec = System.currentTimeMillis() / 1000
 
-        if (expTime != null && expTime < nowSec && repository != null && !isRefreshingTokens) {
+        if (expTime != null && expTime < nowSec && repository != null && !isRefreshingTokens && !hasRefreshedTokenForCurrentChannel) {
+            hasRefreshedTokenForCurrentChannel = true
             isRefreshingTokens = true
             onStateChanged?.invoke(false, true, "Updating Stream Security Token...")
             playerScope.launch {
@@ -145,14 +151,32 @@ class NemoExoPlayer(
         onSourceSwitched?.invoke(sourceIdx, sources.size)
     }
 
-    fun switchNextSource(reason: String = "Manual switch"): Boolean {
+    fun switchNextSource(reason: String = "Manual switch", isAutoFailover: Boolean = false): Boolean {
         val ch = currentChannel ?: return false
         val sources = ch.sources
-        if (sources.size <= 1) return false
+        if (sources.size <= 1) {
+            if (isAutoFailover) {
+                onStateChanged?.invoke(false, false, "Stream unavailable: $reason")
+            }
+            return false
+        }
 
-        val nextIdx = (currentSourceIndex + 1) % sources.size
-        playChannel(ch, nextIdx)
-        return true
+        val nextIdx = currentSourceIndex + 1
+        if (isAutoFailover) {
+            if (nextIdx < sources.size) {
+                playChannel(ch, nextIdx)
+                return true
+            } else {
+                // Reached the end of available sources for this channel. Stop auto-failover to prevent infinite loops!
+                onStateChanged?.invoke(false, false, "All ${sources.size} stream sources failed. Tap retry to restart.")
+                return false
+            }
+        } else {
+            // Manual user switch cycles through sources
+            val wrapIdx = nextIdx % sources.size
+            playChannel(ch, wrapIdx)
+            return true
+        }
     }
 
     private fun playSource(source: StreamSource) {
@@ -258,6 +282,15 @@ class NemoExoPlayer(
             i += 2
         }
         return data
+    }
+
+    fun pause() {
+        exoPlayer?.pause()
+    }
+
+    fun stop() {
+        exoPlayer?.stop()
+        exoPlayer?.clearMediaItems()
     }
 
     fun release() {

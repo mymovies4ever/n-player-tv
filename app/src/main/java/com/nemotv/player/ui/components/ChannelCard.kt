@@ -102,6 +102,7 @@ fun ChannelCard(
                     AsyncImage(
                         model = ImageRequest.Builder(LocalContext.current)
                             .data(channel.logo)
+                            .size(96, 96)
                             .crossfade(true)
                             .build(),
                         contentDescription = channel.name,
